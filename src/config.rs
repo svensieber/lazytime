@@ -171,14 +171,17 @@ impl Config {
         if let Some(path) = &self.ipc_socket_path {
             return PathBuf::from(path);
         }
-        #[cfg(feature = "ipc-unix")]
+        #[cfg(all(feature = "ipc-tcp", any(target_os = "macos", target_os = "windows")))]
+        return PathBuf::from("127.0.0.1:45555");
+
+        #[cfg(all(feature = "ipc-unix", not(any(target_os = "macos", target_os = "windows"))))]
         if let Some(home) = dirs::home_dir() {
             return home.join(".local/run/lazytime.sock");
         }
-        #[cfg(feature = "ipc-unix")]
+        #[cfg(all(feature = "ipc-unix", not(any(target_os = "macos", target_os = "windows"))))]
         return PathBuf::from("/tmp/lazytime.sock");
 
-        #[cfg(feature = "ipc-tcp")]
+        #[cfg(all(feature = "ipc-tcp", not(any(target_os = "macos", target_os = "windows"))))]
         return PathBuf::from("127.0.0.1:45555");
 
         #[allow(unreachable_code)]
