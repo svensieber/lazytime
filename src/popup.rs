@@ -352,7 +352,7 @@ fn padded_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
 
 #[cfg(feature = "popup-ui")]
 fn popup_native_options(title: &str, size: [f32; 2]) -> eframe::NativeOptions {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     let mut options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title(title)
@@ -361,8 +361,8 @@ fn popup_native_options(title: &str, size: [f32; 2]) -> eframe::NativeOptions {
         ..Default::default()
     };
 
-    #[cfg(not(target_os = "linux"))]
-    let mut options = eframe::NativeOptions {
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title(title)
             .with_always_on_top()
