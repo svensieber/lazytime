@@ -21,8 +21,6 @@ pub struct MacosStatusItem {
 
 impl MacosStatusItem {
     pub fn new(ctx: &egui::Context) -> anyhow::Result<Self> {
-        set_dock_visible(true);
-
         let menu = Menu::new();
         let show_id = MenuId::new("lazytime-show");
         let hide_id = MenuId::new("lazytime-hide");
@@ -33,10 +31,11 @@ impl MacosStatusItem {
 
         menu.append_items(&[&show, &hide, &PredefinedMenuItem::separator(), &quit])?;
 
-        let icon = tray_icon_from_png(include_bytes!("../../icon_white.png"))?;
+        let icon = status_bar_icon()?;
         let tray_icon = TrayIconBuilder::new()
             .with_menu(Box::new(menu))
             .with_tooltip("LazyTime")
+            .with_title("LT")
             .with_icon(icon)
             .with_icon_as_template(true)
             .with_menu_on_left_click(true)
@@ -83,9 +82,29 @@ impl MacosStatusItem {
     }
 }
 
-fn tray_icon_from_png(png: &[u8]) -> anyhow::Result<Icon> {
-    let icon = eframe::icon_data::from_png_bytes(png)?;
-    Ok(Icon::from_rgba(icon.rgba, icon.width, icon.height)?)
+fn status_bar_icon() -> anyhow::Result<Icon> {
+    const WIDTH: u32 = 18;
+    const HEIGHT: u32 = 18;
+    let mut rgba = vec![0; (WIDTH * HEIGHT * 4) as usize];
+
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            let dx = x as i32 - 9;
+            let dy = y as i32 - 9;
+            let on_outer_ring = (dx * dx + dy * dy) <= 64 && (dx * dx + dy * dy) >= 45;
+            let on_clock_hand = (x == 9 && (5..=9).contains(&y)) || (y == 9 && (9..=13).contains(&x));
+
+            if on_outer_ring || on_clock_hand {
+                let offset = ((y * WIDTH + x) * 4) as usize;
+                rgba[offset] = 255;
+                rgba[offset + 1] = 255;
+                rgba[offset + 2] = 255;
+                rgba[offset + 3] = 255;
+            }
+        }
+    }
+
+    Ok(Icon::from_rgba(rgba, WIDTH, HEIGHT)?)
 }
 
 pub fn set_dock_visible(visible: bool) {
