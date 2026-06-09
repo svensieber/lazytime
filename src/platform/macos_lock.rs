@@ -1,3 +1,4 @@
+use std::process::Command;
 use std::sync::mpsc;
 
 use core_foundation::base::TCFType;
@@ -35,9 +36,13 @@ pub fn spawn_lock_monitor(tx_lock: mpsc::Sender<LockEvent>) {
 }
 
 fn current_locked_state() -> bool {
+    cg_session_locked_state().unwrap_or(false) || ioreg_locked_state()
+}
+
+fn cg_session_locked_state() -> Option<bool> {
     let dict_ref = unsafe { CGSessionCopyCurrentDictionary() };
     if dict_ref.is_null() {
-        return false;
+        return None;
     }
 
     let dict: CFDictionary = unsafe { CFDictionary::wrap_under_create_rule(dict_ref) };
@@ -45,10 +50,23 @@ fn current_locked_state() -> bool {
     let value =
         unsafe { CFDictionaryGetValue(dict.as_concrete_TypeRef(), key.as_CFTypeRef() as *const _) };
     if value.is_null() {
-        return false;
+        return None;
     }
 
     let value_ref = value as CFTypeRef;
     let is_boolean = unsafe { CFGetTypeID(value_ref) == CFBooleanGetTypeID() };
-    is_boolean && unsafe { CFBooleanGetValue(value as CFBooleanRef) }
+    is_boolean.then(|| unsafe { CFBooleanGetValue(value as CFBooleanRef) })
+}
+
+fn ioreg_locked_state() -> bool {
+    let Ok(output) = Command::new("ioreg").args(["-n", "Root", "-d1"]).output() else {
+        return false;
+    };
+
+    if !output.status.success() {
+        return false;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout.contains("\"IOConsoleLocked\" = Yes") || stdout.contains("CGSSessionScreenIsLocked")
 }
