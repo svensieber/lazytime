@@ -399,6 +399,9 @@ impl GuiApp {
 impl eframe::App for GuiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         #[cfg(target_os = "macos")]
+        ctx.request_repaint_after(Duration::from_secs(1));
+
+        #[cfg(target_os = "macos")]
         self.handle_macos_status_item(ctx);
 
         self.apply_theme(ctx);

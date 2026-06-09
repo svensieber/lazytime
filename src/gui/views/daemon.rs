@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::io::BufRead;
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::time::{Duration, Instant};
 
 use chrono::Local;
 use eframe::egui;
@@ -30,6 +31,8 @@ pub struct DaemonView {
     receiver: Option<Receiver<String>>,
     status: Option<DaemonStatus>,
     debug_enabled: bool,
+    keep_running: bool,
+    last_restart_attempt: Option<Instant>,
 }
 
 impl DaemonView {
@@ -40,6 +43,7 @@ impl DaemonView {
         if status == DaemonStatus::Stopped {
             let start_msg = self.start_daemon(config);
             if start_msg == "daemon running" {
+                self.keep_running = true;
                 self.push_log("daemon auto-started by GUI".to_string());
                 return Some("daemon auto-started".to_string());
             }
@@ -60,6 +64,7 @@ impl DaemonView {
         self.ensure_owner_id();
         self.poll_events();
         self.poll_child_exit(config);
+        self.restart_if_needed(config);
         self.status = Some(self.compute_status(config));
     }
 
@@ -98,6 +103,9 @@ impl DaemonView {
                     .clicked()
                 {
                     message = Some(self.start_daemon(config));
+                    if message.as_deref() == Some("daemon running") {
+                        self.keep_running = true;
+                    }
                 }
             });
         });
@@ -188,6 +196,7 @@ impl DaemonView {
 
         self.child = Some(child);
         self.receiver = Some(rx);
+        self.keep_running = true;
         self.push_log(format!("daemon process started (loglevel={loglevel})"));
         "daemon running".to_string()
     }
@@ -206,6 +215,7 @@ impl DaemonView {
     }
 
     fn stop(&mut self, config: &Config) -> String {
+        self.keep_running = false;
         let status = self.compute_status(config);
         if status == DaemonStatus::Outside {
             return self.stop_outside_daemon(config);
@@ -277,6 +287,21 @@ impl DaemonView {
                 self.child = None;
             }
         }
+    }
+
+    fn restart_if_needed(&mut self, config: &Config) {
+        if !self.keep_running || self.compute_status(config) != DaemonStatus::Stopped {
+            return;
+        }
+        if self
+            .last_restart_attempt
+            .is_some_and(|last| last.elapsed() < Duration::from_secs(5))
+        {
+            return;
+        }
+        self.last_restart_attempt = Some(Instant::now());
+        let msg = self.start_daemon(config);
+        self.push_log(format!("daemon auto-restart: {msg}"));
     }
 
     fn cleanup_owned_lock(&mut self, config: &Config, stop_pid: bool) {
