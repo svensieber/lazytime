@@ -242,9 +242,11 @@ impl GuiApp {
             set_dock_visible(false);
         }
 
-        let Some(status_item) = self.macos_status.as_ref() else {
+        let status_title = self.title_tracking_text();
+        let Some(status_item) = self.macos_status.as_mut() else {
             return;
         };
+        status_item.set_title(&status_title);
 
         while let Some(command) = status_item.take_command() {
             match command {

@@ -15,8 +15,9 @@ pub enum StatusCommand {
 }
 
 pub struct MacosStatusItem {
-    _tray_icon: TrayIcon,
+    tray_icon: TrayIcon,
     commands: Arc<Mutex<VecDeque<StatusCommand>>>,
+    title: String,
 }
 
 impl MacosStatusItem {
@@ -69,9 +70,19 @@ impl MacosStatusItem {
         }));
 
         Ok(Self {
-            _tray_icon: tray_icon,
+            tray_icon,
             commands,
+            title: "LT".to_string(),
         })
+    }
+
+    pub fn set_title(&mut self, title: &str) {
+        let next = title.trim();
+        if next.is_empty() || next == self.title {
+            return;
+        }
+        self.tray_icon.set_title(Some(next));
+        self.title = next.to_string();
     }
 
     pub fn take_command(&self) -> Option<StatusCommand> {
