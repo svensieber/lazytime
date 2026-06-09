@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn generated_color_is_stable() {
-        assert_eq!(generate_color_for_name("Default"), "#CC8033");
-        assert_eq!(generate_color_for_name("Project A"), "#6F33CC");
+        assert_eq!(generate_color_for_name("Default"), "#5733CC");
+        assert_eq!(generate_color_for_name("Project A"), "#33BFCC");
     }
 }

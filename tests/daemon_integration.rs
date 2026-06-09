@@ -1,15 +1,17 @@
 use chrono::{Duration, Utc};
-use lazytime::config::Config;
-use lazytime::daemon::state::{DaemonState, WindowInfo};
+use lazytime::config::{Config, ThemePreference, TimeRange};
+use lazytime::daemon::state::DaemonState;
+use lazytime::platform::types::WindowInfo;
 use lazytime::{db, rules};
 use std::collections::BTreeMap;
 use tempfile::tempdir;
 
 fn test_config(db_path: &std::path::Path) -> Config {
     Config {
+        onboarding_done: true,
         default_project: "DefaultProject".to_string(),
         tracking_stability_seconds: 5,
-        working_hours: BTreeMap::new(),
+        working_hours: all_day_working_hours(),
         track_reminder_seconds: 300,
         track_reminder_snooze_seconds: 1800,
         summary_update_seconds: 5,
@@ -24,7 +26,23 @@ fn test_config(db_path: &std::path::Path) -> Config {
         jira_issue_type: "Story".to_string(),
         jira_sap_field: "sap_project".to_string(),
         ipc_socket_path: None,
+        theme_preference: ThemePreference::Auto,
+        sidebar_collapsed: false,
     }
+}
+
+fn all_day_working_hours() -> BTreeMap<u8, Vec<TimeRange>> {
+    (0..=6)
+        .map(|day| {
+            (
+                day,
+                vec![TimeRange {
+                    start: "00:00".to_string(),
+                    end: "23:59".to_string(),
+                }],
+            )
+        })
+        .collect()
 }
 
 #[tokio::test]

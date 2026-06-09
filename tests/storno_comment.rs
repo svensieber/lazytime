@@ -1,3 +1,4 @@
+use lazytime::config::ThemePreference;
 use lazytime::db;
 use lazytime::tui::trackings_storno::storno_tracking;
 use serde_json::json;
@@ -8,6 +9,7 @@ use std::thread;
 
 fn test_config(db_file: String, jira_url: String) -> lazytime::config::Config {
     lazytime::config::Config {
+        onboarding_done: true,
         default_project: "Default".to_string(),
         tracking_stability_seconds: 60,
         working_hours: Default::default(),
@@ -25,6 +27,8 @@ fn test_config(db_file: String, jira_url: String) -> lazytime::config::Config {
         jira_issue_type: "Story".to_string(),
         jira_sap_field: "sap_project".to_string(),
         ipc_socket_path: None,
+        theme_preference: ThemePreference::Auto,
+        sidebar_collapsed: false,
     }
 }
 

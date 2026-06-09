@@ -1,33 +1,17 @@
 use chrono::Datelike;
-use lazytime::config::Config;
 use lazytime::db;
-use lazytime::tui::trackings_cleanup::cleanup_today_unsynced_trackings;
+use lazytime::tui::trackings_cleanup::cleanup_unsynced_trackings_in_range;
 use std::collections::BTreeMap;
 use tempfile::tempdir;
 
-fn test_config(
-    db_path: &std::path::Path,
-    working_hours: BTreeMap<u8, Vec<lazytime::config::TimeRange>>,
-) -> Config {
-    Config {
-        default_project: "DefaultProject".to_string(),
-        tracking_stability_seconds: 10,
-        working_hours,
-        track_reminder_seconds: 300,
-        track_reminder_snooze_seconds: 1800,
-        summary_update_seconds: 5,
-        report_start: None,
-        report_end: None,
-        db_file: db_path.to_string_lossy().to_string(),
-        jira_url: None,
-        jira_token: None,
-        jira_email: None,
-        jira_project: None,
-        jira_assignee: None,
-        jira_issue_type: "Story".to_string(),
-        jira_sap_field: "sap_project".to_string(),
-        ipc_socket_path: None,
-    }
+fn cleanup_today(
+    conn: &rusqlite::Connection,
+) -> anyhow::Result<lazytime::tui::trackings_cleanup::CleanupStats> {
+    let today = chrono::Local::now()
+        .date_naive()
+        .format("%Y-%m-%d")
+        .to_string();
+    cleanup_unsynced_trackings_in_range(conn, &today, &today)
 }
 
 #[test]
@@ -43,9 +27,7 @@ fn cleanup_merges_same_project_unsynced_without_gap() {
     db::add_manual_tracking(&conn, "A", &ts(9, 0), Some(&ts(9, 30)), None).expect("insert 1");
     db::add_manual_tracking(&conn, "A", &ts(9, 30), Some(&ts(10, 0)), None).expect("insert 2");
 
-    let config = test_config(&db_path, BTreeMap::new());
-
-    let stats = cleanup_today_unsynced_trackings(&conn, &config).expect("cleanup");
+    let stats = cleanup_today(&conn).expect("cleanup");
     assert_eq!(stats.merged_groups, 1);
     assert_eq!(stats.removed_rows, 1);
 
@@ -80,9 +62,8 @@ fn cleanup_keeps_rows_when_gap_exists() {
         }],
     );
 
-    let config = test_config(&db_path, working_hours);
-
-    let stats = cleanup_today_unsynced_trackings(&conn, &config).expect("cleanup");
+    let _ = working_hours;
+    let stats = cleanup_today(&conn).expect("cleanup");
     assert_eq!(stats.merged_groups, 0);
     assert_eq!(stats.removed_rows, 0);
 
@@ -107,9 +88,7 @@ fn cleanup_does_not_merge_synced_rows() {
     let first_id = rows.first().expect("first row").id;
     db::set_tracking_synced(&conn, first_id, 1).expect("mark synced");
 
-    let config = test_config(&db_path, BTreeMap::new());
-
-    let stats = cleanup_today_unsynced_trackings(&conn, &config).expect("cleanup");
+    let stats = cleanup_today(&conn).expect("cleanup");
     assert_eq!(stats.merged_groups, 0);
     assert_eq!(stats.removed_rows, 0);
 

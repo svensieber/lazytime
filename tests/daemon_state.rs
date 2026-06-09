@@ -1,9 +1,49 @@
 use chrono::{Duration, Utc};
-use lazytime::config::Config;
-use lazytime::daemon::state::{DaemonState, PausedTracking, WindowInfo};
+use lazytime::config::{Config, ThemePreference, TimeRange};
+use lazytime::daemon::state::{DaemonState, PausedTracking};
+use lazytime::platform::types::WindowInfo;
 use lazytime::{db, rules};
 use std::collections::BTreeMap;
 use tempfile::tempdir;
+
+fn test_config(db_file: String) -> Config {
+    Config {
+        onboarding_done: true,
+        default_project: "DefaultProject".to_string(),
+        tracking_stability_seconds: 10,
+        working_hours: all_day_working_hours(),
+        track_reminder_seconds: 300,
+        track_reminder_snooze_seconds: 1800,
+        summary_update_seconds: 5,
+        report_start: None,
+        report_end: None,
+        db_file,
+        jira_url: None,
+        jira_token: None,
+        jira_email: None,
+        jira_project: None,
+        jira_assignee: None,
+        jira_issue_type: "Story".to_string(),
+        jira_sap_field: "sap_project".to_string(),
+        ipc_socket_path: None,
+        theme_preference: ThemePreference::Auto,
+        sidebar_collapsed: false,
+    }
+}
+
+fn all_day_working_hours() -> BTreeMap<u8, Vec<TimeRange>> {
+    (0..=6)
+        .map(|day| {
+            (
+                day,
+                vec![TimeRange {
+                    start: "00:00".to_string(),
+                    end: "23:59".to_string(),
+                }],
+            )
+        })
+        .collect()
+}
 
 #[tokio::test]
 async fn debounce_switches_after_stability_window() {
@@ -26,25 +66,7 @@ async fn debounce_switches_after_stability_window() {
     )
     .expect("beta rules");
 
-    let config = Config {
-        default_project: "DefaultProject".to_string(),
-        tracking_stability_seconds: 10,
-        working_hours: BTreeMap::new(),
-        track_reminder_seconds: 300,
-        track_reminder_snooze_seconds: 1800,
-        summary_update_seconds: 5,
-        report_start: None,
-        report_end: None,
-        db_file: db_path.to_string_lossy().to_string(),
-        jira_url: None,
-        jira_token: None,
-        jira_email: None,
-        jira_project: None,
-        jira_assignee: None,
-        jira_issue_type: "Story".to_string(),
-        jira_sap_field: "sap_project".to_string(),
-        ipc_socket_path: None,
-    };
+    let config = test_config(db_path.to_string_lossy().to_string());
 
     let ruleset = rules::load_rules(&conn).expect("rules load");
     let cache = rules::RuleCache::default();
@@ -141,25 +163,7 @@ async fn switches_based_on_last_tracking_change_not_last_window_event() {
     )
     .expect("beta rules");
 
-    let config = Config {
-        default_project: "DefaultProject".to_string(),
-        tracking_stability_seconds: 10,
-        working_hours: BTreeMap::new(),
-        track_reminder_seconds: 300,
-        track_reminder_snooze_seconds: 1800,
-        summary_update_seconds: 5,
-        report_start: None,
-        report_end: None,
-        db_file: db_path.to_string_lossy().to_string(),
-        jira_url: None,
-        jira_token: None,
-        jira_email: None,
-        jira_project: None,
-        jira_assignee: None,
-        jira_issue_type: "Story".to_string(),
-        jira_sap_field: "sap_project".to_string(),
-        ipc_socket_path: None,
-    };
+    let config = test_config(db_path.to_string_lossy().to_string());
 
     let ruleset = rules::load_rules(&conn).expect("rules load");
     let cache = rules::RuleCache::default();
@@ -233,25 +237,7 @@ async fn switches_based_on_last_tracking_change_not_last_window_event() {
 
 #[test]
 fn paused_tracking_roundtrip_in_memory() {
-    let config = Config {
-        default_project: "DefaultProject".to_string(),
-        tracking_stability_seconds: 10,
-        working_hours: BTreeMap::new(),
-        track_reminder_seconds: 300,
-        track_reminder_snooze_seconds: 1800,
-        summary_update_seconds: 5,
-        report_start: None,
-        report_end: None,
-        db_file: "/tmp/lazytime-test.sqlite".to_string(),
-        jira_url: None,
-        jira_token: None,
-        jira_email: None,
-        jira_project: None,
-        jira_assignee: None,
-        jira_issue_type: "Story".to_string(),
-        jira_sap_field: "sap_project".to_string(),
-        ipc_socket_path: None,
-    };
+    let config = test_config("/tmp/lazytime-test.sqlite".to_string());
 
     let mut state = DaemonState::new(config);
     let paused = PausedTracking {
@@ -278,25 +264,7 @@ async fn does_not_autostart_while_paused_from_lock() {
     let conn = db::open(&db_path).expect("open");
     db::migrate(&conn).expect("migrate");
 
-    let config = Config {
-        default_project: "DefaultProject".to_string(),
-        tracking_stability_seconds: 10,
-        working_hours: BTreeMap::new(),
-        track_reminder_seconds: 300,
-        track_reminder_snooze_seconds: 1800,
-        summary_update_seconds: 5,
-        report_start: None,
-        report_end: None,
-        db_file: db_path.to_string_lossy().to_string(),
-        jira_url: None,
-        jira_token: None,
-        jira_email: None,
-        jira_project: None,
-        jira_assignee: None,
-        jira_issue_type: "Story".to_string(),
-        jira_sap_field: "sap_project".to_string(),
-        ipc_socket_path: None,
-    };
+    let config = test_config(db_path.to_string_lossy().to_string());
 
     let cache = rules::RuleCache::default();
     cache.replace(rules::RuleSet::default()).await;
