@@ -2,6 +2,8 @@
 mod app;
 #[cfg(feature = "popup-ui")]
 mod color;
+#[cfg(all(feature = "popup-ui", target_os = "macos"))]
+mod macos_status;
 #[cfg(feature = "popup-ui")]
 mod style;
 #[cfg(feature = "popup-ui")]

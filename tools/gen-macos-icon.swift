@@ -13,12 +13,22 @@ func drawIcon(size: CGFloat) -> NSImage {
     image.lockFocus()
 
     let rect = NSRect(x: 0, y: 0, width: size, height: size)
+    let cornerRadius = size * 0.225
+    let iconPath = NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius)
+    iconPath.addClip()
 
     let bg = NSGradient(colors: [
-        NSColor(calibratedRed: 0.08, green: 0.24, blue: 0.55, alpha: 1.0),
-        NSColor(calibratedRed: 0.10, green: 0.48, blue: 0.80, alpha: 1.0),
+        NSColor(calibratedRed: 0.09, green: 0.25, blue: 0.56, alpha: 1.0),
+        NSColor(calibratedRed: 0.13, green: 0.60, blue: 0.82, alpha: 1.0),
     ])
     bg?.draw(in: rect, angle: -90)
+
+    let highlightRect = NSRect(x: 0, y: size * 0.45, width: size, height: size * 0.55)
+    let highlight = NSGradient(colors: [
+        NSColor(calibratedWhite: 1.0, alpha: 0.34),
+        NSColor(calibratedWhite: 1.0, alpha: 0.02),
+    ])
+    highlight?.draw(in: highlightRect, angle: 90)
 
     let bezelInset = size * 0.11
     let bezelRect = rect.insetBy(dx: bezelInset, dy: bezelInset)
@@ -78,6 +88,10 @@ func drawIcon(size: CGFloat) -> NSImage {
     let dotPath = NSBezierPath(ovalIn: dotRect)
     handColor.setFill()
     dotPath.fill()
+
+    iconPath.lineWidth = max(1.0, size * 0.012)
+    NSColor(calibratedWhite: 1.0, alpha: 0.30).setStroke()
+    iconPath.stroke()
 
     image.unlockFocus()
     return image

@@ -8,6 +8,8 @@ use crate::config::{Config, ThemePreference};
 use crate::db;
 use crate::platform;
 
+#[cfg(target_os = "macos")]
+use super::macos_status::{MacosStatusItem, StatusCommand, set_dock_visible};
 use super::style;
 use super::views;
 
@@ -86,6 +88,12 @@ struct GuiApp {
     header_icon_light: Option<egui::TextureHandle>,
     header_icon_dark: Option<egui::TextureHandle>,
     header_icon_size: egui::Vec2,
+    #[cfg(target_os = "macos")]
+    macos_status: Option<MacosStatusItem>,
+    #[cfg(target_os = "macos")]
+    macos_status_attempted: bool,
+    #[cfg(target_os = "macos")]
+    allow_close: bool,
 }
 
 struct ToastMessage {
@@ -118,6 +126,12 @@ impl GuiApp {
             header_icon_light: None,
             header_icon_dark: None,
             header_icon_size: egui::vec2(0.0, 0.0),
+            #[cfg(target_os = "macos")]
+            macos_status: None,
+            #[cfg(target_os = "macos")]
+            macos_status_attempted: false,
+            #[cfg(target_os = "macos")]
+            allow_close: false,
         };
         let (header_icon_light, header_icon_size) = Self::load_header_icon(
             egui_ctx,
@@ -211,6 +225,45 @@ impl GuiApp {
         ctx.set_theme(pref);
         // Keep layout metrics identical across light/dark; only visuals should change.
         style::apply_base_style(ctx);
+    }
+
+    #[cfg(target_os = "macos")]
+    fn handle_macos_status_item(&mut self, ctx: &egui::Context) {
+        if !self.macos_status_attempted {
+            self.macos_status_attempted = true;
+            self.macos_status = MacosStatusItem::new(ctx)
+                .inspect_err(|err| tracing::warn!("macos status item unavailable: {err}"))
+                .ok();
+        }
+
+        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+            set_dock_visible(false);
+        }
+
+        let Some(status_item) = self.macos_status.as_ref() else {
+            return;
+        };
+
+        while let Some(command) = status_item.take_command() {
+            match command {
+                StatusCommand::Show => {
+                    set_dock_visible(true);
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                }
+                StatusCommand::Hide => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                    set_dock_visible(false);
+                }
+                StatusCommand::Quit => {
+                    set_dock_visible(true);
+                    self.allow_close = true;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            }
+        }
     }
 
     fn set_mode(&mut self, mode: ViewMode) {
@@ -343,6 +396,9 @@ impl GuiApp {
 
 impl eframe::App for GuiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        #[cfg(target_os = "macos")]
+        self.handle_macos_status_item(ctx);
+
         self.apply_theme(ctx);
         if !self.config.onboarding_done {
             egui::CentralPanel::default().show(ctx, |ui| {

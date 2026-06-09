@@ -1,7 +1,18 @@
-use std::process::Command;
 use std::sync::mpsc;
 
+use core_foundation::base::TCFType;
+use core_foundation::dictionary::CFDictionary;
+use core_foundation::string::CFString;
+use core_foundation_sys::base::{CFGetTypeID, CFTypeRef};
+use core_foundation_sys::dictionary::{CFDictionaryGetValue, CFDictionaryRef};
+use core_foundation_sys::number::{CFBooleanGetTypeID, CFBooleanGetValue, CFBooleanRef};
+
 use super::types::{LockEvent, LockSource};
+
+#[link(name = "ApplicationServices", kind = "framework")]
+unsafe extern "C" {
+    fn CGSessionCopyCurrentDictionary() -> CFDictionaryRef;
+}
 
 pub fn spawn_lock_monitor(tx_lock: mpsc::Sender<LockEvent>) {
     std::thread::spawn(move || {
@@ -24,24 +35,20 @@ pub fn spawn_lock_monitor(tx_lock: mpsc::Sender<LockEvent>) {
 }
 
 fn current_locked_state() -> bool {
-    let script = r#"
-tell application "System Events"
-  set isLocked to false
-  try
-    set isLocked to (name of first process whose name is "loginwindow") is "loginwindow"
-  end try
-  return isLocked
-end tell
-"#;
-
-    let output = Command::new("osascript").arg("-e").arg(script).output();
-    match output {
-        Ok(out) if out.status.success() => {
-            let text = String::from_utf8_lossy(&out.stdout)
-                .trim()
-                .to_ascii_lowercase();
-            text == "true"
-        }
-        _ => false,
+    let dict_ref = unsafe { CGSessionCopyCurrentDictionary() };
+    if dict_ref.is_null() {
+        return false;
     }
+
+    let dict: CFDictionary = unsafe { CFDictionary::wrap_under_create_rule(dict_ref) };
+    let key = CFString::new("CGSSessionScreenIsLocked");
+    let value =
+        unsafe { CFDictionaryGetValue(dict.as_concrete_TypeRef(), key.as_CFTypeRef() as *const _) };
+    if value.is_null() {
+        return false;
+    }
+
+    let value_ref = value as CFTypeRef;
+    let is_boolean = unsafe { CFGetTypeID(value_ref) == CFBooleanGetTypeID() };
+    is_boolean && unsafe { CFBooleanGetValue(value as CFBooleanRef) }
 }
