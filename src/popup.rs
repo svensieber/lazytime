@@ -1,7 +1,9 @@
 use anyhow::Result;
+#[cfg(all(feature = "popup-ui", target_os = "macos"))]
+use std::process::Command;
+use std::sync::mpsc;
 #[cfg(feature = "popup-ui")]
 use std::sync::OnceLock;
-use std::sync::mpsc;
 use std::thread;
 
 #[cfg(feature = "popup-ui")]
@@ -159,7 +161,12 @@ fn run_reminder_popup(request: PopupRequest, tx_action: mpsc::Sender<PopupAction
     }
 }
 
-#[cfg(feature = "popup-ui")]
+#[cfg(all(feature = "popup-ui", target_os = "macos"))]
+fn run_resume_popup(request: ResumePopupRequest, tx_action: mpsc::Sender<ResumeAction>) {
+    run_macos_resume_dialog(request, tx_action);
+}
+
+#[cfg(all(feature = "popup-ui", not(target_os = "macos")))]
 fn run_resume_popup(request: ResumePopupRequest, tx_action: mpsc::Sender<ResumeAction>) {
     let tx_for_ui = tx_action.clone();
     let app = ResumePopupApp::new(request, tx_for_ui);
@@ -180,6 +187,58 @@ fn run_resume_popup(request: ResumePopupRequest, tx_action: mpsc::Sender<ResumeA
     }
 }
 
+#[cfg(all(feature = "popup-ui", target_os = "macos"))]
+fn run_macos_resume_dialog(request: ResumePopupRequest, tx_action: mpsc::Sender<ResumeAction>) {
+    let paused_at = crate::time::parse_ts(&request.paused_at_ts)
+        .map(|dt| crate::time::format_ts_local(&dt))
+        .unwrap_or_else(|_| request.paused_at_ts.clone());
+    let message = format!(
+        "Project '{}' was paused at {}.\n\nChoose how to continue:",
+        request.project_name, paused_at
+    );
+    let script = format!(
+        "display dialog {} buttons {{\"Ignore\", \"Continue from now\", \"Continue from lock time\"}} default button \"Continue from now\" with title \"LazyTime Resume Tracking\"\nbutton returned of result",
+        applescript_string(&message)
+    );
+
+    let action = match Command::new("osascript").arg("-e").arg(script).output() {
+        Ok(output) if output.status.success() => {
+            let button = String::from_utf8_lossy(&output.stdout);
+            match button.trim() {
+                "Continue from lock time" => ResumeAction::ContinueFromLockTime,
+                "Continue from now" => ResumeAction::ContinueFromNow,
+                _ => ResumeAction::Ignore,
+            }
+        }
+        Ok(output) => {
+            tracing::warn!(
+                "resume_dialog: macos dialog failed status={:?} stderr={}",
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+            ResumeAction::Ignore
+        }
+        Err(err) => {
+            tracing::warn!("resume_dialog: macos dialog failed to start: {err}");
+            ResumeAction::Ignore
+        }
+    };
+
+    tracing::info!(
+        "resume_choice: id={} project={} choice={:?} choice_time={}",
+        request.paused_tracking_id,
+        request.project_name,
+        action,
+        crate::time::format_ts_local(&chrono::Utc::now())
+    );
+    let _ = tx_action.send(action);
+}
+
+#[cfg(all(feature = "popup-ui", target_os = "macos"))]
+fn applescript_string(value: &str) -> String {
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
 #[cfg(feature = "popup-ui")]
 struct PopupApp {
     message: String,
@@ -187,7 +246,7 @@ struct PopupApp {
     sent: bool,
 }
 
-#[cfg(feature = "popup-ui")]
+#[cfg(all(feature = "popup-ui", not(target_os = "macos")))]
 struct ResumePopupApp {
     request: ResumePopupRequest,
     tx_action: mpsc::Sender<ResumeAction>,
@@ -214,7 +273,7 @@ impl PopupApp {
     }
 }
 
-#[cfg(feature = "popup-ui")]
+#[cfg(all(feature = "popup-ui", not(target_os = "macos")))]
 impl ResumePopupApp {
     fn new(request: ResumePopupRequest, tx_action: mpsc::Sender<ResumeAction>) -> Self {
         Self {
@@ -258,6 +317,7 @@ impl ResumePopupApp {
 }
 
 #[cfg(feature = "popup-ui")]
+#[cfg(not(target_os = "macos"))]
 #[cfg(feature = "popup-output-placement")]
 fn output_center_position(output_name: &str) -> Option<egui::Pos2> {
     let rect = crate::platform::output_rect(output_name)?;
@@ -267,6 +327,7 @@ fn output_center_position(output_name: &str) -> Option<egui::Pos2> {
 }
 
 #[cfg(feature = "popup-ui")]
+#[cfg(not(target_os = "macos"))]
 #[cfg(not(feature = "popup-output-placement"))]
 fn output_center_position(_output_name: &str) -> Option<egui::Pos2> {
     None
@@ -304,7 +365,7 @@ impl eframe::App for PopupApp {
     }
 }
 
-#[cfg(feature = "popup-ui")]
+#[cfg(all(feature = "popup-ui", not(target_os = "macos")))]
 impl eframe::App for ResumePopupApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.place_on_output_once(ctx);
