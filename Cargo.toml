@@ -34,7 +34,7 @@ keyring = { version = "3.6", features = ["apple-native", "windows-native", "sync
 whoami = "1.5"
 
 [features]
-default = ["backend-sway", "ipc-unix", "popup-ui", "popup-output-placement"]
+default = ["backend-sway", "backend-macos", "ipc-unix", "popup-ui", "popup-output-placement"]
 backend-linux = ["dep:dbus", "dep:x11rb"]
 backend-sway = ["backend-linux", "dep:swayipc"]
 backend-hyprland = ["backend-linux"]
