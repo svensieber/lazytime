@@ -288,7 +288,9 @@ pub async fn run_event_loop(
         let reminder_now = Utc::now();
         if state.paused().is_none() && state.reminder_due(reminder_now) {
             let conn = crate::db::open(config.db_path())?;
-            if crate::db::get_active_tracking(&conn)?.is_none() {
+            if crate::db::get_active_tracking(&conn)?.is_none()
+                && !state.manual_stop_snooze_active(&conn, reminder_now)?
+            {
                 if state.reminder_popup_open() {
                     tracing::debug!("reminder popup already open; skipping spawn");
                 } else {

@@ -68,5 +68,9 @@ fn ioreg_locked_state() -> bool {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout.contains("\"IOConsoleLocked\" = Yes") || stdout.contains("CGSSessionScreenIsLocked")
+    // Match the value, not just a key name. `IOConsoleLocked` flips between
+    // `Yes`/`No` with the actual lock state; the previous bare `CGSSessionScreenIsLocked`
+    // key-name match risked reporting a permanent locked state so unlock events
+    // would never fire.
+    stdout.contains("\"IOConsoleLocked\" = Yes")
 }

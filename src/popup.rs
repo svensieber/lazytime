@@ -6,7 +6,7 @@ use std::sync::mpsc;
 use std::sync::OnceLock;
 use std::thread;
 
-#[cfg(feature = "popup-ui")]
+#[cfg(all(feature = "popup-ui", not(target_os = "macos")))]
 use eframe::egui;
 #[cfg(all(feature = "popup-ui", target_os = "linux"))]
 use winit::platform::wayland::EventLoopBuilderExtWayland;
@@ -140,7 +140,7 @@ fn popup_ui_worker(rx: mpsc::Receiver<PopupUiCommand>) {
     tracing::warn!("popup ui worker stopped");
 }
 
-#[cfg(feature = "popup-ui")]
+#[cfg(all(feature = "popup-ui", not(target_os = "macos")))]
 fn run_reminder_popup(request: PopupRequest, tx_action: mpsc::Sender<PopupAction>) {
     let tx_for_ui = tx_action.clone();
     let app = PopupApp::new(request.message, tx_for_ui);
@@ -159,6 +159,42 @@ fn run_reminder_popup(request: PopupRequest, tx_action: mpsc::Sender<PopupAction
         );
         let _ = tx_action.send(PopupAction::No);
     }
+}
+
+// On macOS the popup worker runs off the main thread, where winit/eframe cannot
+// create an event loop. Use a native AppleScript dialog instead, mirroring the
+// resume dialog, so a reminder never crashes the shared popup worker thread.
+#[cfg(all(feature = "popup-ui", target_os = "macos"))]
+fn run_reminder_popup(request: PopupRequest, tx_action: mpsc::Sender<PopupAction>) {
+    let script = format!(
+        "display dialog {} buttons {{\"No\", \"Snooze\", \"Yes\"}} default button \"Yes\" with title \"LazyTime Tracking Reminder\"\nbutton returned of result",
+        applescript_string(&request.message)
+    );
+
+    let action = match Command::new("osascript").arg("-e").arg(script).output() {
+        Ok(output) if output.status.success() => {
+            let button = String::from_utf8_lossy(&output.stdout);
+            match button.trim() {
+                "Yes" => PopupAction::Yes,
+                "Snooze" => PopupAction::Snooze,
+                _ => PopupAction::No,
+            }
+        }
+        Ok(output) => {
+            tracing::warn!(
+                "reminder_dialog: macos dialog failed status={:?} stderr={}",
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+            PopupAction::No
+        }
+        Err(err) => {
+            tracing::warn!("reminder_dialog: macos dialog failed to start: {err}");
+            PopupAction::No
+        }
+    };
+
+    let _ = tx_action.send(action);
 }
 
 #[cfg(all(feature = "popup-ui", target_os = "macos"))]
@@ -239,7 +275,7 @@ fn applescript_string(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
-#[cfg(feature = "popup-ui")]
+#[cfg(all(feature = "popup-ui", not(target_os = "macos")))]
 struct PopupApp {
     message: String,
     tx_action: mpsc::Sender<PopupAction>,
@@ -254,7 +290,7 @@ struct ResumePopupApp {
     positioned: bool,
 }
 
-#[cfg(feature = "popup-ui")]
+#[cfg(all(feature = "popup-ui", not(target_os = "macos")))]
 impl PopupApp {
     fn new(message: String, tx_action: mpsc::Sender<PopupAction>) -> Self {
         Self {
@@ -333,7 +369,7 @@ fn output_center_position(_output_name: &str) -> Option<egui::Pos2> {
     None
 }
 
-#[cfg(feature = "popup-ui")]
+#[cfg(all(feature = "popup-ui", not(target_os = "macos")))]
 impl eframe::App for PopupApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -406,12 +442,12 @@ impl eframe::App for ResumePopupApp {
     }
 }
 
-#[cfg(feature = "popup-ui")]
+#[cfg(all(feature = "popup-ui", not(target_os = "macos")))]
 fn padded_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
     ui.add_sized([160.0, 32.0], egui::Button::new(label))
 }
 
-#[cfg(feature = "popup-ui")]
+#[cfg(all(feature = "popup-ui", not(target_os = "macos")))]
 fn popup_native_options(title: &str, size: [f32; 2]) -> eframe::NativeOptions {
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     let mut options = eframe::NativeOptions {

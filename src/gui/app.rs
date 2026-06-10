@@ -236,7 +236,13 @@ impl GuiApp {
                 .ok();
         }
 
-        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
+        // Only intercept the close button to hide-to-tray when a status item exists.
+        // Without it there would be no dock icon and no menu to bring the window
+        // back, leaving the app as an unreachable ghost process.
+        if self.macos_status.is_some()
+            && ctx.input(|i| i.viewport().close_requested())
+            && !self.allow_close
+        {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
             set_dock_visible(false);
